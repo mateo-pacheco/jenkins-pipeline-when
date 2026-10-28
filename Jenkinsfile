@@ -1,73 +1,112 @@
 pipeline {
     agent any
-    
+
     environment {
-         WEBSERVER = "Nginx"
+        WEBSERVER = 'Nginx'
+        WEB_DIRECTORY = '/home/jenkins/app-web'
+        VOLUME_NAME = 'app-web-data'
     }
+
     stages {
-        stage('Create  directory for the WEB Application')
-        {
-            steps{
-               
-                //Fisrt, drop the directory if exists
-                sh 'rm -rf /home/jenkins/app-web'
-                //Create the directory
-                sh 'mkdir /home/jenkins/app-web'
-                
-            }
-        }
-        stage('Drop the container'){
+        stage('Prepare web application') {
             steps {
-            echo 'droping the container...'
-            sh 'docker rm -f app-web'
-            }
-        }
-        // Apache Webserver
-        stage('Create the Apache container') {
-            when {
-                 environment name: 'WEBSERVER', value: 'Apache'
-            }
-            steps {
-            echo 'Creating the container...'
-            sh 'docker run -dit --name app-web -p 9100:80  -v /home/jenkins/app-web:/usr/local/apache2/htdocs/ httpd'
-            }
-        }
-        //Nginx webserver
-        stage('Create the Nginx container') {
-            when {
-                 environment name: 'WEBSERVER', value: 'Nginx'
-            }
-            steps {
-            echo 'Creating the container...'
-            sh 'docker run -dit --name app-web -p 9100:80  -v /home/jenkins/app-web:/usr/share/nginx/html nginx'
-         
+                echo 'Preparing web application...'
+
+                sh '''
+                    mkdir -p "$WEB_DIRECTORY"
+                    find "$WEB_DIRECTORY" -mindepth 1 -maxdepth 1 \
+                        -exec rm -rf -- {} +
+
+                    cp -r web/. "$WEB_DIRECTORY/"
+
+                    echo "Files copied:"
+                    ls -la "$WEB_DIRECTORY"
+                '''
             }
         }
 
-        
-        stage('Copy the web application to the container directory') {
+        stage('Drop previous container') {
             steps {
-                echo 'Copying web application...'             
-                sh 'cp -r web/* /home/jenkins/app-web'
+                echo 'Removing previous container...'
+
+                sh 'docker rm -f app-web || true'
+            }
+        }
+
+        stage('Create Apache container') {
+            when {
+                environment name: 'WEBSERVER', value: 'Apache'
+            }
+
+            steps {
+                echo 'Creating Apache container...'
+
+                sh '''
+                    docker run -dit \
+                        --name app-web \
+                        -p 9100:80 \
+                        -v "$VOLUME_NAME":/usr/local/apache2/htdocs \
+                        httpd:2.4
+                '''
+            }
+        }
+
+        stage('Create Nginx container') {
+            when {
+                environment name: 'WEBSERVER', value: 'Nginx'
+            }
+
+            steps {
+                echo 'Creating Nginx container...'
+
+                sh '''
+                    docker run -dit \
+                        --name app-web \
+                        -p 9100:80 \
+                        -v "$VOLUME_NAME":/usr/share/nginx/html \
+                        nginx:stable
+                '''
+            }
+        }
+
+        stage('Verify deployment') {
+            steps {
+                echo 'Verifying deployment...'
+
+                sh '''
+                    docker ps --filter name=app-web
+
+                    docker exec app-web sh -c '
+                        if [ -d /usr/share/nginx/html ]; then
+                            ls -la /usr/share/nginx/html
+                        else
+                            ls -la /usr/local/apache2/htdocs
+                        fi
+                    '
+                '''
             }
         }
     }
 
     post {
         always {
-            echo 'These steps are always executed'   
+            echo 'These steps are always executed'
         }
-      
-        success {
-        // One or more steps need to be included within each condition's block.
-          echo 'the deployment has worked'
-          archiveArtifacts allowEmptyArchive: true, artifacts: 'web/*', followSymlinks: false
-          cleanWs()         
 
-       }
-       failure {
-        // One or more steps need to be included within each condition's block.
-        echo 'An error has ocurred'       
-       }
+        success {
+            echo 'The deployment has worked'
+
+            archiveArtifacts(
+                allowEmptyArchive: true,
+                artifacts: 'web/**',
+                followSymlinks: false
+            )
+
+            cleanWs()
+        }
+
+        failure {
+            echo 'An error has occurred'
+        }
     }
 }
