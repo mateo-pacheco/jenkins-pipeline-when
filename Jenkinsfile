@@ -3,6 +3,7 @@ pipeline {
 
     parameters {
        choice choices: ['Apache', 'Nginx'], name: 'WEBSERVER'
+        choice choices: ['Development', 'Test','Production'], name: 'ENV'
     }
 
     stages {
@@ -12,10 +13,13 @@ pipeline {
             }
         }
 
-        stage('Create Apache container') {
+        stage('Create Apache Dev') {
             when {
-                environment name: 'WEBSERVER', value: 'Apache'
-            }
+                allOf {           
+                 environment name: 'WEBSERVER', value: 'Apache'
+                 environment name: 'ENV', value: 'Development'                
+                }
+             }
 
             steps {
                 sh '''
@@ -27,10 +31,31 @@ pipeline {
             }
         }
 
-        stage('Create Nginx container') {
+        stage('Create Nginx Test') {
             when {
-                environment name: 'WEBSERVER', value: 'Nginx'
+                allOf {           
+                 environment name: 'WEBSERVER', value: 'Nginx'
+                 environment name: 'ENV', value: 'Test'
             }
+             }
+
+            steps {
+                sh '''
+                    docker run -dit \
+                      --name app-web \
+                      -p 9100:80 \
+                      nginx:stable
+                '''
+            }
+        }
+
+        stage('Create Nginx Produccion') {
+            when {
+                allOf {           
+                 environment name: 'WEBSERVER', value: 'Nginx'
+                 environment name: 'ENV', value: 'Production'
+            }
+             }
 
             steps {
                 sh '''
