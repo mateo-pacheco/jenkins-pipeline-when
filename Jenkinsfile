@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        WEBSERVER = 'Nginx'
+        WEBSERVER = 'Apache'
         WEB_DIRECTORY = '/home/jenkins/app-web'
         VOLUME_NAME = 'app-web-data'
     }
