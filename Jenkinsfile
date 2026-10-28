@@ -1,8 +1,8 @@
 pipeline {
     agent any
 
-    environment {
-        WEBSERVER = 'Apache'
+    parameters {
+       choice choices: ['Apache', 'Nginx'], name: 'WEBSERVER'
     }
 
     stages {
