@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        WEBSERVER = 'Nginx'
+        WEBSERVER = 'Apache'
     }
 
     stages {
