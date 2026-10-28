@@ -2,33 +2,12 @@ pipeline {
     agent any
 
     environment {
-        WEBSERVER = 'Apache'
-        WEB_DIRECTORY = '/home/jenkins/app-web'
-        VOLUME_NAME = 'app-web-data'
+        WEBSERVER = 'Nginx'
     }
 
     stages {
-        stage('Prepare web application') {
+        stage('Remove previous container') {
             steps {
-                echo 'Preparing web application...'
-
-                sh '''
-                    mkdir -p "$WEB_DIRECTORY"
-                    find "$WEB_DIRECTORY" -mindepth 1 -maxdepth 1 \
-                        -exec rm -rf -- {} +
-
-                    cp -r web/. "$WEB_DIRECTORY/"
-
-                    echo "Files copied:"
-                    ls -la "$WEB_DIRECTORY"
-                '''
-            }
-        }
-
-        stage('Drop previous container') {
-            steps {
-                echo 'Removing previous container...'
-
                 sh 'docker rm -f app-web || true'
             }
         }
@@ -39,14 +18,11 @@ pipeline {
             }
 
             steps {
-                echo 'Creating Apache container...'
-
                 sh '''
                     docker run -dit \
-                        --name app-web \
-                        -p 9100:80 \
-                        -v "$VOLUME_NAME":/usr/local/apache2/htdocs \
-                        httpd:2.4
+                      --name app-web \
+                      -p 9100:80 \
+                      httpd:2.4
                 '''
             }
         }
@@ -57,30 +33,42 @@ pipeline {
             }
 
             steps {
-                echo 'Creating Nginx container...'
-
                 sh '''
                     docker run -dit \
-                        --name app-web \
-                        -p 9100:80 \
-                        -v "$VOLUME_NAME":/usr/share/nginx/html \
-                        nginx:stable
+                      --name app-web \
+                      -p 9100:80 \
+                      nginx:stable
                 '''
+            }
+        }
+
+        stage('Deploy web application') {
+            steps {
+                script {
+                    if (env.WEBSERVER == 'Nginx') {
+                        sh '''
+                            docker cp web/. app-web:/usr/share/nginx/html/
+                        '''
+                    } else {
+                        sh '''
+                            docker cp web/. app-web:/usr/local/apache2/htdocs/
+                        '''
+                    }
+                }
             }
         }
 
         stage('Verify deployment') {
             steps {
-                echo 'Verifying deployment...'
-
                 sh '''
-                    docker ps --filter name=app-web
-
                     docker exec app-web sh -c '
-                        if [ -d /usr/share/nginx/html ]; then
+                        if [ -f /usr/share/nginx/html/index.html ]; then
                             ls -la /usr/share/nginx/html
-                        else
+                        elif [ -f /usr/local/apache2/htdocs/index.html ]; then
                             ls -la /usr/local/apache2/htdocs
+                        else
+                            echo "ERROR: index.html not found"
+                            exit 1
                         fi
                     '
                 '''
@@ -90,23 +78,17 @@ pipeline {
 
     post {
         always {
-            echo 'These steps are always executed'
+            echo 'Pipeline finished'
         }
 
         success {
-            echo 'The deployment has worked'
-
-            archiveArtifacts(
-                allowEmptyArchive: true,
-                artifacts: 'web/**',
-                followSymlinks: false
-            )
-
+            echo 'Deployment successful'
+            archiveArtifacts allowEmptyArchive: true, artifacts: 'web/**'
             cleanWs()
         }
 
         failure {
-            echo 'An error has occurred'
+            echo 'Deployment failed'
         }
     }
 }
