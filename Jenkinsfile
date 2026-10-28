@@ -67,6 +67,38 @@ pipeline {
             }
         }
 
+        stage('Error message Nginx') {
+           when {
+                allOf {
+                     environment name: 'WEBSERVER', value: 'Nginx'
+                     environment name: 'ENV', value: 'Development'                       
+                     }               
+            }
+
+            steps {
+            echo 'Nginx cannot be deployed in Development...'
+         
+            }
+        }
+
+        //Error is Webserver is Apache and Env is Test or Production
+         stage('Error message Apache') {
+           when {
+                allOf {
+                    environment name: 'WEBSERVER', value: 'Apache'
+                    anyOf {
+                        environment name: 'ENV', value: 'Test'
+                        environment name: 'ENV', value: 'Production'
+                     }
+                }
+            }
+
+            steps {
+            echo 'Apache cannot be deployed in Test or Production environments...'
+         
+            }
+        }
+
         stage('Deploy web application') {
             steps {
                 script {
